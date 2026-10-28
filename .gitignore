@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+agents/*
+!agents/.gitkeep
+*.pem
+node_modules/
+audit.db
+dashboard/dist/
+eval/output/
+data/
+registry.json

@@ -1,0 +1,79 @@
+# docker compose up --build        starts everything: opa, db, api, dashboard
+# docker compose up -d db          only the database (Phase 5)
+# docker compose up -d opa         only OPA (handy when you run the API with uvicorn)
+#
+# Needs a ".env" file (copy .env.example): POSTGRES_PASSWORD and ADMIN_KEY must be set.
+services:
+  opa:
+    image: openpolicyagent/opa:latest
+    command: ["run", "--server", "--addr", ":8181", "/policy/policy.rego"]
+    volumes:
+      - ./policy.rego:/policy/policy.rego:ro   # policy mounted read-only
+    ports:
+      - "8181:8181"
+    # No healthcheck: the OPA image has no shell/curl. The api fails closed (503) until OPA answers.
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: soc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: soc_audit
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U soc -d soc_audit"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg2://soc:${POSTGRES_PASSWORD}@db:5432/soc_audit
+      OPA_URL: http://opa:8181/v1/data/authz/allow
+      ADMIN_KEY: ${ADMIN_KEY:?set ADMIN_KEY in .env}
+      SECURITY_MODE: full
+      CORS_ORIGIN: http://localhost:5173
+      SELF_URL: http://127.0.0.1:8000
+      # keys, registry and agent files live in ./data on your computer (git-ignored)
+      REGISTRY_PATH: /app/data/registry.json
+      ISSUER_KEY_PATH: /app/data/issuer_key.pem
+      SERVER_KEY_PATH: /app/data/server_key.pem
+      AGENTS_DIR: /app/data/agents
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      opa:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        VITE_API_URL: http://localhost:8000
+        VITE_ADMIN_KEY: ${ADMIN_KEY}   # DEV ONLY: ends up inside the browser code
+    ports:
+      - "5173:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:

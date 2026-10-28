@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pandas
+httpx
+pytest
+cryptography
+PyJWT
+pydantic-settings
+SQLAlchemy>=2.0
+psycopg2-binary
+matplotlib

@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+.env
+.git
+agents
+data
+*.pem
+registry.json
+audit.db
+eval/output
+dashboard/node_modules
+dashboard/dist
